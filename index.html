@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <h1>ball game</h1>
+    <button id="create-btn">New Game</button>
+    <input type="text" name="gameid" id="gameid" />
+    <button id="join-btn">Join game</button>
+    <div id="div-players"></div>
+    <div id="board"></div>
+    <script>
+      let clientId;
+      let gameId;
+      let player_color;
+      let ws = new WebSocket("ws://localhost:8080");
+
+      const join_btn = document.getElementById("join-btn");
+      const code_input = document.getElementById("gameid");
+      const divPlayers = document.getElementById("div-players");
+      const boardDiv = document.getElementById("board");
+
+      join_btn.onclick = (e) => {
+        if (!gameId) {
+          gameId = code_input.value;
+        }
+        const payload = {
+          method: "join",
+          clientId,
+          gameId,
+        };
+        ws.send(JSON.stringify(payload));
+      };
+      const create_btn = document.getElementById("create-btn");
+      create_btn.onclick = (e) => {
+        const payload = {
+          method: "create",
+          clientId,
+        };
+        ws.send(JSON.stringify(payload));
+      };
+
+      ws.onmessage = (message) => {
+        // message.data is the string that the server sends
+        const response = JSON.parse(message.data);
+        if (response.method === "connect") {
+          clientId = response.clientId;
+          console.log("cliend id set successfully", clientId);
+        }
+
+        if (response.method === "create") {
+          clientId = response.clientId;
+          gameId = response.game.id;
+          navigator.clipboard.writeText(gameId);
+          console.log(
+            "game successfully created with id",
+            response.game.id,
+            "with",
+            response.game.balls,
+            "balls"
+          );
+        }
+
+        if (response.method === "join") {
+          gameId = response.game.id;
+          while (divPlayers.firstChild)
+            divPlayers.removeChild(divPlayers.firstChild);
+          response.game.clients.forEach((c) => {
+            let d = document.createElement("div");
+            d.style.width = "200px";
+            d.style.background = c.color;
+            d.textContent = c.clientId;
+            divPlayers.appendChild(d);
+            if (c.clientId === clientId) player_color = c.color;
+          });
+
+          while (boardDiv.firstChild) boardDiv.removeChild(boardDiv.firstChild);
+          for (let i = 0; i < response.game.balls; i++) {
+            let b = document.createElement("button");
+            b.style.width = "150px";
+            b.style.height = "150px";
+            b.textContent = i;
+            b.id = "ball" + i;
+            b.onclick = () => {
+              b.style.background = player_color;
+              const payload = {
+                method: "play",
+                clientId,
+                gameId,
+                ballId: i,
+                color: player_color,
+              };
+              ws.send(JSON.stringify(payload));
+            };
+            boardDiv.appendChild(b);
+          }
+        }
+
+        if (response.method === "update") {
+          const { state } = response.game;
+          for (const s in state) {
+            const ballObject = document.getElementById("ball" + s);
+            ballObject.style.background = state[s];
+          }
+        }
+      };
+    </script>
+  </body>
+</html>
